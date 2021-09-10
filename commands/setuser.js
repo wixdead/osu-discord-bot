@@ -1,11 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders')
-const redis = require('redis')
-
-const client = redis.createClient({
-  socket: {
-    url: 'redis://127.0.0.1:6379'
-  }
-})  
+const { client } = require('../helpers/redisConnector')
 
 const setuser = {
   data: new SlashCommandBuilder()
