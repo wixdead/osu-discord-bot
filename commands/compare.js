@@ -1,29 +1,26 @@
 const { SlashCommandBuilder } = require('@discordjs/builders')
 const { MessageEmbed } = require('discord.js')
-
-const { getAsync, client} = require('../helpers/redisConnector')
-
+const { getAsync } = require('../helpers/redisConnector')
 const { getScores, getBeatmapInfo} = require('../helpers/osuapi')
-const { getPP } = require('../helpers/oppai')
+const getMods = require('../helpers/bitwise')
+const {UserScore} = require('../helpers/Models/UserScore')
+const moment = require('moment')
 
+const nf = new Intl.NumberFormat() //Separate number by commas
 
-function createEmbed(playInfo, beatmapInfo, scores){
-  const { score, username, maxcombo, count100, count300, count50, countmiss, rank} = playInfo
-  const { title, version, difficultyrating, beatmapset_id, beatmap_id } = beatmapInfo
+function createEmbed(beatmapInfo, scores){
+  const { title, version, beatmapset_id, beatmap_id } = beatmapInfo
 
   const exampleEmbed = new MessageEmbed()
     .setColor('#0099ff')
-    .setTitle(`Plays from *user* on ${title} [${version}] (${Number(difficultyrating).toFixed(2)})`)
-    .setURL(`https://osu.ppy.sh/b/${beatmap_id}`)
-    .setAuthor('Some name', 'https://i.imgur.com/AfFp7pu.png', 'https://discord.js.org')
-    .setDescription(`PP:`)
+    .setAuthor(`Plays from ${scores[0].username} on ${title} [${version}]`, `https://a.ppy.sh/${scores[0].userid}?1601599554.png`, `https://osu.ppy.sh/b/${beatmap_id}`)
     .setThumbnail(`https://b.ppy.sh/thumb/${beatmapset_id}l.jpg`)
     .setTimestamp()
-    .setFooter(`${playInfo.date}`, 'https://i.imgur.com/AfFp7pu.png');
 
-  for(scorex of scores) {
-    console.log(`score ${scorex.score} - maxcombo ${scorex.maxcombo}`)
-    exampleEmbed.addField('Score', `score ${scorex.score} - maxcombo ${scorex.maxcombo}`)
+  for(let score of scores) {
+    console.log(`score ${score.score} - maxcombo ${score.maxcombo}`)
+    exampleEmbed.addField(`\`${getMods(score.mods)}\` score`, 
+      ` \u27B8 ${nf.format(score.score)} - ${score.getAcc()}% - ${(+score.pp).toFixed(2)}PP - ${moment(score.date).fromNow()}`)
   }
 
   return exampleEmbed
@@ -34,40 +31,22 @@ const compare = {
     .setName('compare')
     .setDescription('compare user scores')
 }
-// , count100, count300, count50, countmiss, rank, date, pp
-class userPlay {
-  constructor(score, username, maxcombo){
-    this.score = score
-    this.username = username
-    this.maxcombo = maxcombo
-  }
-}
 
 compare.execute = async function(interaction) {
-  let getRedisLastMap = await getAsync(`${interaction.guildId}:last_np`)
-  let getRedisUsername = await getAsync(interaction.member.id)
-
-
+  const getRedisLastMap = await getAsync(`${interaction.guildId}:last_np`)
+  const getRedisUsername = await getAsync(interaction.member.id)
 
   let scores = await getScores(getRedisLastMap, getRedisUsername) //Array of scores
 
-  let testArray = []
-
-  for(score of scores) {
-    testArray.push(new userPlay(score.score, score.username, score.maxcombo))
+  let scoresArray = []
+  for(let score of scores) {
+    const dateDay = score.date.split(' ')
+    scoresArray.push(new UserScore(getRedisLastMap,score.score, score.username,score.user_id, score.maxcombo, score.count300, score.count100, score.count50, score.countmiss, score.rank, dateDay[0], score.pp, score.enabled_mods))
   }
 
-  console.log(testArray)
+  const beatmapInfo = await getBeatmapInfo(getRedisLastMap)
 
-  let scoron = scores[0]
-
-  let beatmapInfo = await getBeatmapInfo(getRedisLastMap)
-  // console.log(beatmapInfo)
-
-
-
-
-  await interaction.reply({ content: `${getRedisLastMap}, ${getRedisUsername}`, embeds: [createEmbed(scoron, beatmapInfo, testArray)]})
+  await interaction.reply({ content: ' ', embeds: [createEmbed(beatmapInfo, scoresArray)]})
 }
 
 module.exports = compare
